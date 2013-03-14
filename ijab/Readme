@@ -1,0 +1,64 @@
+    Introduction
+    ============
+  ijab module integrates iJab(www.ijab.im-an open source XMPP web chat client recommended by xmpp.org)
+to your Drupal site.
+
+   Overview
+   ========
+  ijab mdoule hooks hook_footer to add iJab to the page footer region, you will see a facebook chat bar liked float toolbar under the bottom of
+your page after installing and enabling ijab module. You can use it to chat with others.
+
+   Use cases
+   =========
+* Allows users in your Drupal site to chat each other.
+* Allows multiple users of your Drupal site to chat together.
+* Used to provide online support on your Drupal site.
+
+   Features
+   ========
+* Based on standard XMPP protocol
+* Cross-browser compatible
+* Easy integration with your plone website
+* Theme support
+* In-browser, non pop-up browser window
+* New Message Notification
+* Sound support
+* MUC
+* User Search
+* Roster Management
+* Typing notify
+* Smileys Support
+* Easy custom toolbox in chat bar
+* Black-list support
+
+   Requirements
+   ============
+* Drupal 6.x
+
+   Notes
+   =====
+ijab module was configured to connect our company's XMPP server by default. After you
+install ijab and refresh your page, you will login to our server as anonymous
+automatically. You can chat with us to experience ijab module. If you like it you should
+read the following section to do more integration work.
+
+   Full Integration Works You Should Do?
+   =====================================
+* Deploy your own XMPP server
+* Integrate your Drupal site with your XMPP server
+        - users integration
+        - friends mechanism
+        - SSO
+        - ...
+
+
+   Installation and Configure
+   ==========================
+   Install ijab module
+     You just need to put ijab module to your Drupal's module directory to install ijab module,
+ and then enable it in your admin page.
+ 
+   Configure ijab module
+        - login in as site administrator
+        - goes to http://your_drupal_site/admin/settings/ijab
+        - configure as your situation

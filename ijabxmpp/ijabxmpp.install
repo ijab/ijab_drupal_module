@@ -1,0 +1,84 @@
+<?php
+
+function ijabxmpp_schema() {
+  $schema['ijabxmpp_users'] = array(
+   'description'     => 'Stores status of each user\'s syncing to xmpp server ',
+   'fields'          => array(
+     'uid'             => array(
+       'description'     => 'The user\'s {users}.uid',
+       'type'            => 'int',
+       'size'            => 'normal',
+       'not null'        => TRUE,
+     ),
+     'sync'        => array(
+       'type' => 'int',
+       'unsigned' => TRUE,
+       'not null' => TRUE,
+       'default' => 0,
+       'size' => 'tiny',
+       'description' => 'Whether user has synced(1) or not(0) to XMPP server.'
+     ),
+   ),
+   'unique keys'       => array(
+            'uid_key'           => array('uid')
+            ),
+  );
+ return $schema;
+}
+
+function ijabxmpp_install() {
+    if( !db_table_exists('ijabxmpp_users') )
+        drupal_install_schema('ijabxmpp');
+    // add field to user_relationship table
+    if( db_table_exists('user_relationships') ) {
+        $new_fields = array(
+            'ijab_sync' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => FALSE, 'default' => 0, 'size' => 'tiny'),
+            );
+    
+        $ret = array();
+        foreach ($new_fields as $field => $spec) {
+            db_add_field($ret, 'user_relationships', $field, $spec);
+        }
+    }
+    
+    variable_set('ijab_xmpp_auto_login', 1);
+    variable_set('ijab_xmpp_username_cookie_field', 'uid');
+    variable_set('ijab_xmpp_token_cookie_field', session_name());
+}
+
+function ijabxmpp_uninstall() {
+    variable_del('ijabxmpp_xmlrpc_host');
+	variable_del('ijabxmpp_xmlrpc_port');
+	variable_del('ijabxmpp_xmlrpc_querystring');
+	variable_del('ijab_xmpp_auto_login');
+	variable_del('ijab_xmpp_username_cookie_field');
+	variable_del('ijab_xmpp_token_cookie_field');
+	variable_del('ijabxmpp_sync_uid_name');
+}
+
+function ijabxmpp_enable() {
+    if( !db_table_exists('ijabxmpp_users') )
+        drupal_install_schema('ijabxmpp');
+    
+    // add field to user_relationship table
+    if( db_table_exists('user_relationships') ) {
+        $new_fields = array(
+            'ijab_sync' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => FALSE, 'default' => 0, 'size' => 'tiny'),
+            );
+    
+        $ret = array();
+        foreach ($new_fields as $field => $spec) {
+            db_add_field($ret, 'user_relationships', $field, $spec);
+        }
+    }
+    
+    variable_set('ijab_xmpp_auto_login', 1);
+    variable_set('ijab_xmpp_username_cookie_field', 'uid');
+    variable_set('ijab_xmpp_token_cookie_field', session_name());
+}
+
+function ijabxmpp_disable() {
+	variable_del('ijab_xmpp_auto_login');
+	variable_del('ijab_xmpp_username_cookie_field');
+	variable_del('ijab_xmpp_token_cookie_field');
+}

@@ -1,0 +1,516 @@
+<?php
+
+
+/**
+ * Implementation of hook_help().
+ */
+function ijabxmpp_help($path, $arg) {
+  $output = '';
+  switch ($path) {
+    case 'admin/help#ijabxmpp':
+      $output .= '<p>'. t('This module enables you sync users from Drupal to XMPP server and make iJab single-sign-on with Drupal.') .'</p>';
+      break;
+    case 'admin/settings/ijabxmpp':
+      $output .= '<p>'. t('Here you can set XMPP server and web service address.') .'</p>';
+  }
+  return $output;
+}
+
+
+function ijabxmpp_admin() {
+    $form = array();
+    
+    // iJab XMPP Config
+    $form['ijabxmpp_xmlrpc_host'] = array(
+		'#type' => 'textfield',
+		'#title' => t('XMPP XML-RPC Server Host'),
+		'#size' => 50,
+		'#maxlength' => 255,
+		'#description' => t('XMPP XML-RPC server.'),
+		'#default_value' => variable_get('ijabxmpp_xmlrpc_host', '127.0.0.1'),
+	);	
+	
+	$form['ijabxmpp_xmlrpc_port'] = array(
+		'#type' => 'textfield',
+		'#title' => t('XMPP XML-RPC Server Port'),
+		'#size' => 20,
+		'#maxlength' => 5,
+		'#description' => t('XMPP XML-PRC sever port.'),
+		'#default_value' => variable_get('ijabxmpp_xmlrpc_port', 4560),
+	);
+	
+	$form['ijabxmpp_xmlrpc_querystring'] = array(
+		'#type' => 'textfield',
+		'#title' => t('XMPP XML-RPC Query String'),
+		'#size' => 50,
+		'#maxlength' => 255,
+		'#description' => t('Additional path information for the XMLRPC request.'),
+		'#default_value' => variable_get('ijabxmpp_xmlrpc_querystring', '/'),
+	);
+	
+	$sync_uid_name = array(
+	    'name' => 'name',
+	    'uid' => 'uid',
+	);
+	$form['ijabxmpp_sync_uid_name'] = array(
+		'#type' => 'select',
+		'#title' => t('Username for XMPP Server'),
+		'#options' => $sync_uid_name,
+		'#description' => t('Select uid or name as username in XMPP Server'),
+		'#default_value' => variable_get('ijabxmpp_sync_uid_name', 'uid'),
+		'#required' => TRUE,
+	);
+	
+	// retrieving the user_relationships_types information
+    if (function_exists('user_relationships_types_load')) {
+        $options = array();
+        foreach (user_relationships_types_load() as $rtype) {
+        $options[$rtype->rtid] = $rtype->name;
+    }
+    if (!empty($options)) {
+      $form['ijabxmpp_types'] = array('#type' => 'fieldset', '#title' => t('XMPP Relationships'), '#collapsible' => TRUE, '#collapsed' => TRUE);
+      $form['ijabxmpp_types']['ijabxmpp_user_relationships_types'] = array(
+        '#type' => 'checkboxes',
+        '#title' => t('User Relationship Types'),
+        '#default_value' => variable_get('ijabxmpp_user_relationships_types', array()),
+        '#options' => $options,
+        '#description' => t('User Relationship Types we will create XMPP relationships for'),
+      );
+    }
+  }
+
+	return system_settings_form($form);
+}
+
+function ijabxmpp_menu() {
+
+  $items = array();
+
+  $items['admin/settings/ijabxmpp'] = array(
+    'title' => 'iJab XMPP Settings',
+    'description' => 'Config iJab XMPP, such as XMPP server type and webservice address.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('ijabxmpp_admin'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+   );
+   
+   $items['ijabxmpp/auth'] = array(
+    'title' => 'iJab XMPP Drupal Auth Script',
+    'description' => 'Add this URL to auth config of xmpp server.',
+    'page callback' => '_ijabxmpp_auth',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  
+   // for debug
+   $items['ijabxmpp/manage_rosteritem'] = array(
+    'title' => 'iJab XMPP Drupal Manage Rosteritem Script',
+    'description' => 'Manage roster of user.',
+    'page callback' => '_ijabxmpp_manage_rosteritem',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  // debug codes end
+  
+  return $items;
+}
+
+
+/**
+ * Implementation of hook_user().
+ */
+function ijabxmpp_user($op, &$edit, &$account, $category = NULL) {
+  // Only operate on login and logout.
+  global $user;
+  
+  switch ($op) {
+    case "login":
+        $sync_fd = variable_get('ijabxmpp_sync_uid_name','uid');
+        if ($sync_fd == 'uid' )
+            setcookie('uid', $user->uid, 0, '/');
+        else
+            setcookie('uid', $user->name, 0, '/');
+        
+        // Check need to sync user to xmpp server or not
+        _try_sync_user_xmpp( $user->uid, $edit, $account );
+        break;
+    case "logout":
+        setcookie('uid', '', time() - 42000, '/');
+        break;
+    case "delete":
+        // Check need to sync user to xmpp server or not
+        _try_sync_user_xmpp( $account->uid, $edit, $account, 'unregister' );
+        break;
+    case "insert":
+        _try_sync_user_xmpp( $account->uid, $edit, $account );
+        break;
+    case "after_update":        
+        _try_sync_user_xmpp( $account->uid, $edit, $account, 'update' );
+        break;
+  }
+}
+
+/**
+ * Implementation of hook_user_operations().
+ */
+function ijabxmpp_user_operations() {
+  $operations = array(
+    'unblock' => array(
+      'label' => t('Unblock the selected users'),
+      'callback' => 'ijabxmpp_user_operations_unblock',
+    ),
+    'block' => array(
+      'label' => t('Block the selected users'),
+      'callback' => 'ijabxmpp_user_operations_block',
+    ),
+    'delete' => array(
+      'label' => t('Delete the selected users'),
+    ),
+  );
+  return $operations;
+}
+
+/**
+ * Implementation of hook_user_relationships()
+ * Hook is provided by the user_relationships_api module
+ */
+function ijabxmpp_relationships_user_relationships($op, &$relationship) {
+    if(array_search($relationship->rtid, variable_get('ijabxmpp_user_relationships_types', array()))) {
+        
+        switch($op) {
+            case 'approve':
+                _ijabxmpp_approve_user_relationship($relationship);
+                break;
+            case 'remove':
+                _ijabxmpp_remove_user_relationship($relationship);
+                break;
+        }
+    }
+}
+
+
+/**
+ * Menu callback: auth user's token sended from xmpp server.
+ */
+function _ijabxmpp_auth() {
+    $uid = isset($_GET['username']) ? $_GET['username'] : '';
+    $token = isset($_GET['token']) ? $_GET['token'] : '';
+    
+    $failed = 'failed:202';
+    $succeeded = $uid;
+    
+    if ( empty($uid) || empty($token) )
+    {
+        echo $failed;
+        exit;
+    }
+    
+    $sync_fd = variable_get('ijabxmpp_sync_uid_name','uid');
+    
+    // validate users sessionid: token
+    $user = db_fetch_object(db_query("SELECT u.*, s.* FROM {users} u INNER JOIN {sessions} s ON u.uid = s.uid WHERE s.sid = '%s'", $token));
+    
+    // We found the client's session record and they are an authenticated,
+    // active user.
+    if ($user && $user->uid > 0 && $user->status == 1) {
+        if ($sync_fd == 'uid' && $user->uid == (int)$uid)
+            echo $succeeded;
+        else if ($sync_fd == 'name' && $user->name == $uid)
+            echo $succeeded;
+        else
+            echo $failed;
+    }
+    else {
+        if($sync_fd == 'uid'){
+            $user = user_load(array('uid'=>$uid, 'pass'=>$token));
+            if($user && $user->uid > 0 && $user->uid == (int)$uid)
+                echo $succeeded;
+                exit;
+        }
+        else {
+            $user = user_load(array('name'=>$uid, 'pass'=>$token));
+            if($user && $user->uid > 0 && $user->name == $uid)
+                echo $succeeded;
+                exit;
+        }
+        echo $failed;
+    }
+    exit;
+}
+
+/**
+ * 
+ */
+function ijabxmpp_user_operations_unblock($accounts) {
+    /*
+    foreach ($accounts as $uid) {
+       _try_sync_user_xmpp($uid, array(), array(), 'unregister');
+    }
+    */
+}
+
+/**
+ *
+ */
+function ijabxmpp_user_operations_block($accounts) {
+    foreach ($accounts as $uid) {
+       _try_sync_user_xmpp($uid, array(), array(), 'unregister');
+    }
+}
+
+/**
+ * Helper function for sync user to xmpp server
+ * op could be register/unregister/update
+ */
+function _try_sync_user_xmpp($uid, &$edit, &$account, $op = 'register') {
+   $domain = variable_get('ijab_xmpp_domain','localhost');
+   $sync_fd = variable_get('ijabxmpp_sync_uid_name','uid');
+   
+   if (empty($account)) {
+      $user = db_fetch_object(db_query("SELECT * FROM {users} WHERE uid = '%s'", $uid));
+   }
+   else {
+      $user = $account->content;
+   } 
+    
+   switch ($op) {
+        case "register":
+            // check user has been synced to xmpp server or not
+            if( !_ijabxmpp_user_synced($uid)) {
+                $sync_username = $uid;
+                if ($sync_fd == 'name') {
+                    $sync_username = isset($edit['name']) && !empty($edit['name']) ? $edit['name'] : $user['name'];
+                }
+                $passwd = isset($edit['pass']) && !empty($edit['pass']) ? $edit['pass'] : 'ijabXMv1.0pp';
+                if (_xmpp_xmlrpc('create_account', array('user'=>$sync_username, 'host'=>$domain, 'password'=>$passwd)) === 0) {
+                    $nickname = isset($edit['name']) && !empty($edit['name']) ? $edit['name'] : $user['name'];
+                    _xmpp_xmlrpc('set_nickname', array('user'=>$sync_username, 'host'=>$domain, 'nickname'=>$nickname));
+                    // update sync status
+                    _ijabxmpp_update_user_sync_status($uid, 1);                    
+                }
+            }
+            // sync user's relationship to roster
+            if( module_exists('user_relationships_api') ) {
+                _ijabxmpp_try_sync_user_relationship($uid);
+            }
+            break;
+        case "unregister":
+            // check user has been synced to xmpp server or not
+            if( _ijabxmpp_user_synced($uid)) {
+                $sync_username = $uid;
+                if ($sync_fd == 'name') {
+                    $sync_username = isset($edit['name']) && !empty($edit['name']) ? $edit['name'] : $user['name'];
+                }
+                _xmpp_xmlrpc('change_password', array('user'=>$sync_username, 'host'=>$domain, 'newpass'=>'ijab'));
+                if (_xmpp_xmlrpc('delete_account', array('user'=>$sync_username, 'host'=>$domain, 'password'=>'ijab')) === 0) {
+                    // update sync status
+                    _ijabxmpp_update_user_sync_status($uid, 0);
+                }
+            }
+            break;
+        case "update":
+            // check user has been synced to xmpp server or not
+            if( _ijabxmpp_user_synced($uid)) {
+                $sync_username = $uid;
+                if ($sync_fd == 'name') {
+                    $sync_username = isset($edit['name']) && !empty($edit['name']) ? $edit['name'] : $user['name'];
+                }
+                if ( isset($edit['pass']) && !empty($edit['pass']) ) {
+                    _xmpp_xmlrpc('change_password', array('user'=>$sync_username, 'host'=>$domain, 'newpass'=>$edit['pass']));
+                }
+                if ( isset($edit['name']) && $edit['name'] != $user['name'] ) {
+                    _xmpp_xmlrpc('set_nickname', array('user'=>$sync_username, 'host'=>$domain, 'nickname'=>$edit['name']));
+                }
+            }
+            break;
+    }
+    return;
+}
+
+/**
+ * Helper function. Make XMLRPC with error logging.
+ */
+function _xmpp_xmlrpc($service, $params) {
+    $host = variable_get('ijabxmpp_xmlrpc_host', '127.0.0.1');
+    $port = variable_get('ijabxmpp_xmlrpc_port', 4560);
+    $query = variable_get('ijabxmpp_xmlrpc_querystring', '/');
+    $url = 'http://'. $host .':'. $port .'/';
+    if (drupal_strlen($query)) {
+        $url .= (strpos($query, '/') == 0) ? substr($query, 1) : $query;
+    }
+    
+    $result = xmlrpc($url, $service, $params);
+    watchdog('ijabxmpp_xmlrpc', 'XMP-RPC URL: !url, Servie: !service' , array('!url' => $url, '!service' => $service), WATCHDOG_ERROR);
+    if ($result === FALSE) {
+        watchdog('ijabxmpp_xmlrpc', 'Errno: !num Message: !msg' , array('!num' => xmlrpc_errno(), '!msg' => xmlrpc_error_msg()), WATCHDOG_ERROR);
+        return FALSE;
+    } else {
+        return $result;
+    }
+}
+
+/**
+ * Check user has synced or not
+ */
+function _ijabxmpp_user_synced($uid) {
+    
+    $user = db_fetch_object(db_query("SELECT t.*, u.* FROM {ijabxmpp_users} t INNER JOIN {users} u ON t.uid = u.uid WHERE t.uid = '%s'", $uid));
+    
+    if ($user && $user->sync == 1) {
+        return TRUE;
+    } else {
+        return FALSE;
+    }
+}
+
+/**
+ * Update sync status
+ */
+function _ijabxmpp_update_user_sync_status($uid, $status) {
+    $user = db_fetch_object(db_query("SELECT t.*, u.* FROM {ijabxmpp_users} t INNER JOIN {users} u ON t.uid = u.uid WHERE t.uid = '%s'", $uid));
+    if ($user && $user->sync != $status) {
+        db_query("UPDATE {ijabxmpp_users} SET sync = %d WHERE uid = %d", $status, $uid);
+    } else if ( !$user && $status == 1 ) {
+        db_query("INSERT INTO {ijabxmpp_users} (uid, sync) VALUES (%d, %d)", $uid, $status);
+    }
+}
+
+/**
+ * sync user's relationship to xmpp server's roster
+ *
+ *
+ */
+function _ijabxmpp_try_sync_user_relationship($uid) {
+    $r_types = variable_get('ijabxmpp_user_relationships_types', array());
+    if(empty($r_types)) return;
+    
+    $ur_sql = " SELECT ur.rid
+      FROM {user_relationships} ur
+        INNER JOIN {user_relationship_types} urt ON ur.rtid = urt.rtid
+      WHERE ur.approved = 1 
+      AND ur.ijab_sync != 1
+      AND ur.rtid IN (";
+    $ur_sql .= join(',', $r_types);
+    $ur_sql .= ") GROUP BY ur.rid";
+    
+    $result = db_query($ur_sql);
+    while ($request = db_fetch_object($result)) {
+        $expired_requests[] = $request->rid;
+        $relationship = user_relationships_load(array('rid' => $request->rid));
+        _ijabxmpp_approve_user_relationship($relationship);
+    }    
+} 
+
+/**
+ * sync users to roster of xmpp server when relationship is approved
+ *
+ */
+function _ijabxmpp_approve_user_relationship($relationship) {
+    $requester = user_load(array('uid' => $relationship->requester_id)); // person who requested the relationship
+    $requestee = user_load(array('uid' => $relationship->requestee_id)); // person who accepted the relationship request
+
+    $domain = variable_get('ijab_xmpp_domain','localhost');
+    $sync_fd = variable_get('ijabxmpp_sync_uid_name','uid');
+    
+    if($sync_fd == 'name') {
+        $localuser = $requester->name;
+        $frienduser = $requestee->name;
+    }
+    else {
+        $localuser = $requester->uid;
+        $frienduser = $requestee->uid;
+    }
+    
+    // check friends exist in xmpp server first
+    if( _xmpp_xmlrpc('check_account', array('user'=>$frienduser, 'host'=>$domain)) === 0) {
+        // add requestee to requester's roster list
+        _xmpp_xmlrpc('add_rosteritem', array('localuser'=>$localuser, 'localserver'=>$domain, 
+                                                        'user'=>$frienduser, 'server'=>$domain, 
+                                                        'nick'=>$requestee->name, 
+                                                        'group'=>'', 'subs'=>'both'));
+                                                        
+        // add requester to requestee's roster list
+        _xmpp_xmlrpc('add_rosteritem', array('localuser'=>$frienduser, 'localserver'=>$domain, 
+                                                        'user'=>$localuser, 'server'=>$domain, 
+                                                        'nick'=>$requester->name, 
+                                                        'group'=>'', 'subs'=>'both'));
+        db_query("UPDATE {user_relationships} SET ijab_sync = 1 WHERE rid = '$relationship->rid'");
+    }
+}
+
+/**
+ * removes roster between the users on the xmpp server when remove has been decided
+ *
+ */
+function _ijabxmpp_remove_user_relationship($relationship) {
+    $removed = user_load(array('uid' => $relationship->requestee_id)); // person being removed from the relationship
+    $user = user_load(array('uid' => $relationship->requester_id)); // person who requested the removal
+  
+    $domain = variable_get('ijab_xmpp_domain','localhost');
+    $sync_fd = variable_get('ijabxmpp_sync_uid_name','uid');
+    
+    if($sync_fd == 'name') {
+        $localuser = $user->name;
+        $frienduser = $removed->name;
+    }
+    else {
+        $localuser = $user->uid;
+        $frienduser = $removed->uid;
+    }
+    
+    // remove requestee from requester's roster list
+    _xmpp_xmlrpc('delete_rosteritem', array('localuser'=>$localuser, 'localserver'=>$domain, 
+                                                    'user'=>$frienduser, 'server'=>$domain));
+                                                    
+    // remove requester from requestee's roster list
+    _xmpp_xmlrpc('delete_rosteritem', array('localuser'=>$frienduser, 'localserver'=>$domain, 
+                                                    'user'=>$localuser, 'server'=>$domain));
+}
+
+/**
+ * Menu call back _ijabxmpp_manage_rosteritem
+ *
+ */
+function _ijabxmpp_manage_rosteritem() {
+    global $user;
+  
+    $sync_fd = variable_get('ijabxmpp_sync_uid_name','uid');
+    if( $sync_fd == 'uid' )
+        $localuser = $user->uid;
+    else
+        $localuser = $user->name;
+    
+    $is_add = isset($_GET['mode']) ? $_GET['mode'] : 'add';
+    $frienduser = isset($_GET['friend']) ? $_GET['friend'] : '';
+    $nick = isset($_GET['nick']) ? $_GET['nick'] : '';
+    if($nick == '') $nick = $frienduser;
+    
+    if( empty($frienduser) ) return;
+    
+    $domain = variable_get('ijab_xmpp_domain','localhost');
+    if( $is_add == 'add' ){    
+        // add requestee to requester's roster list
+        _xmpp_xmlrpc('add_rosteritem', array('localuser'=>$localuser, 'localserver'=>$domain, 
+                                                        'user'=>$frienduser, 'server'=>$domain, 
+                                                        'nick'=>$nick, 
+                                                        'group'=>'test', 'subs'=>'both'));
+                                                        
+        // add requester to requestee's roster list
+        _xmpp_xmlrpc('add_rosteritem', array('localuser'=>$frienduser, 'localserver'=>$domain, 
+                                                        'user'=>$localuser, 'server'=>$domain, 
+                                                        'nick'=>$user->name, 
+                                                        'group'=>'test', 'subs'=>'both'));
+    }
+    else {
+        // remove requestee from requester's roster list
+        _xmpp_xmlrpc('delete_rosteritem', array('localuser'=>$localuser, 'localserver'=>$domain, 
+                                                        'user'=>$frienduser, 'server'=>$domain));
+                                                        
+        // remove requester from requestee's roster list
+        _xmpp_xmlrpc('delete_rosteritem', array('localuser'=>$frienduser, 'localserver'=>$domain, 
+                                                    'user'=>$localuser, 'server'=>$domain));
+        
+    }    
+    echo "$is_add $frienduser to $localuser";
+}

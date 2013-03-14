@@ -1,0 +1,459 @@
+<?php
+/*
+ * Drupal Module: iJab XMPP Chat
+ * Adds iJab to your Drupal pages
+ * iJab Team
+ * @author: Zhan Caibao <zhancaibao@gmail.com>
+ * @see http://www.ijab.im
+ */
+
+
+/**
+ * Display help and module information
+ * @param section which section of the site we're displaying help
+ * @return help text for section
+ */
+function ijab_help($section = '') {
+  $output = '';
+  switch ($section) {
+  case "admin/help#ijab":
+    $output = "<p>". t("Integrate iJab which is an ajax xmpp web chat client into Drupal") ."</p>";
+    break;
+  }
+
+  return $output;
+}
+
+function ijab_admin() {
+    $form = array();
+    
+    // XMPP Config
+	$form['ijab_xmpp_domain'] = array(
+		'#type' => 'textfield',
+		'#title' => t('XMPP Domain'),
+		'#size' => 50,
+		'#maxlength' => 50,
+		'#default_value' => variable_get('ijab_xmpp_domain','anzsoft.com'),
+		'#description' => t('Set the XMPP domain according to your config in your XMPP server, such as EJabberd or OpenFire' ),
+		'#required' => TRUE,
+	);
+	$form['ijab_xmpp_http_bind'] = array(
+		'#type' => 'textfield',
+		'#title' => t('XMPP HTTP-BIND Server Address'),
+		'#size' => 50,
+		'#maxlength' => 100,
+		'#description' => t('Set http-bind server address.'),
+		'#default_value' => variable_get('ijab_xmpp_http_bind', 'http://samespace.anzsoft.com:5280/http-bind/'),
+		'#required' => TRUE,
+	);
+	$form['ijab_xmpp_host'] = array(
+		'#type' => 'textfield',
+		'#title' => t('XMPP Server Host'),
+		'#size' => 50,
+		'#maxlength' => 50,
+		'#description' => t('Set XMPP server host if you use third-party http-bind server instead of that XMPP server offers.'),
+		'#default_value' => variable_get('ijab_xmpp_host', ''),
+	);
+	$form['ijab_xmpp_port'] = array(
+		'#type' => 'textfield',
+		'#title' => t('XMPP Server Port'),
+		'#size' => 8,
+		'#maxlength' => 8,
+		'#description' => t('Set the port that you XMPP server is listening on, by default it is 5222.'),
+		'#default_value' => variable_get('ijab_xmpp_port', 5222),
+		'#required' => TRUE,
+	);
+	$xmpp_server_types = array(
+	    'ejabberd' => 'ejabberd',
+	    'openfire' => 'openfire',
+	    'tigase' => 'tigase'
+	);
+	$form['ijab_xmpp_server_type'] = array(
+		'#type' => 'select',
+		'#title' => t('XMPP Server Type'),
+		'#options' => $xmpp_server_types,
+		'#description' => t('Set the XMPP server you use'),
+		'#default_value' => variable_get('ijab_xmpp_server_type', 'ejabberd'),
+		'#required' => TRUE,
+	);
+	
+	
+	// iJab Configuration
+	$form['ijab_config'] = array(
+		'#type' => 'fieldset',
+		'#title' => t('iJab Options'),
+		'#collapsible' => TRUE,
+		'#collapsed'=>TRUE
+	);
+	
+	$app_types = array(
+	    'bar' => 'bar',
+	    'stand-alone' => 'stand-alone',
+	    'live' => 'live',
+	);
+	/* 
+	 * iJab doesn't support stand-alone and live mode yet
+    $form['ijab_config']['ijab_app_type'] = array(
+		'#type' => 'select',
+		'#title' => t('iJab Mode'),
+		'#options' => $app_types,
+		'#description' => t('Set iJab runniing as one of bar, stand-alone or live mode.'),
+		'#default_value' => variable_get('ijab_app_type', 'bar'),
+		'#required' => TRUE,
+	);
+	*/
+	$themes = array(
+	    'standard' => 'standard',
+	);
+	$form['ijab_config']['ijab_theme'] = array(
+		'#type' => 'select',
+		'#title' => t('iJab Theme'),
+		'#options' => $themes,
+		'#description' => t('Select iJab theme.'),
+		'#default_value' => variable_get('ijab_theme', 'standard'),
+		'#required' => TRUE,
+	);
+	$form['ijab_config']['ijab_avatar_url'] = array(
+		'#type' => 'textfield',
+		'#title' => t('Avatar URL'),
+		'#size' => 50,
+		'#maxlength' => 100,
+		'#description' => t('Set URL to the user photo and it should be a image file, {username} would be replaced by username.'),
+		'#default_value' => variable_get('ijab_avatar_url', 'ijab/avatar?username={username}'),
+	);	
+	$form['ijab_config']['ijab_enable_roster_manage'] = array(
+        '#type' => 'checkbox', 
+        '#title' => t('Enable Roster Management'), 
+        '#return_value' => 1, 
+        '#default_value' => variable_get('ijab_enable_roster_manage', 0), 
+        '#description' => t("User can manage his roster or not."),
+        '#required' => TRUE,
+	);	
+	$form['ijab_config']['ijab_enable_talkto_stranger'] = array(
+        '#type' => 'checkbox', 
+        '#title' => t('Enable Chat with Users not in Roster'), 
+        '#return_value' => 1, 
+        '#default_value' => variable_get('ijab_enable_talkto_stranger', 1), 
+        '#description' => t("User can chat with users not in his roster(friend list)."),
+	);
+	$form['ijab_config']['ijab_expand_bar_default'] = array(
+        '#type' => 'checkbox', 
+        '#title' => t('Chat Bar Expanded by Default'), 
+        '#return_value' => 1, 
+        '#default_value' => variable_get('ijab_expand_bar_default', 0), 
+        '#description' => t("Expand the chat bar after initializing."),
+	);
+	$form['ijab_config']['ijab_enable_login_dialog'] = array(
+        '#type' => 'checkbox', 
+        '#title' => t('Enable Login Dialog'), 
+        '#return_value' => 1, 
+        '#default_value' => variable_get('ijab_enable_login_dialog', 0), 
+        '#description' => t("Enable open login dialog while clicking on Chat region if not online."),
+	);
+	$xmpp_roster_mode = array(
+	    'all' => 'all',
+	    'online' => 'online',
+	);
+	$form['ijab_config']['ijab_xmpp_roster_mode'] = array(
+		'#type' => 'select',
+		'#title' => t('Roster Listing Mode'),
+		'#options' => $xmpp_roster_mode,
+		'#description' => t('Set the show all or only online users.'),
+		'#default_value' => variable_get('ijab_xmpp_roster_mode', 'all'),
+		'#required' => TRUE,
+	);
+	$form['ijab_config']['ijab_hide_online_group'] = array(
+        '#type' => 'checkbox', 
+        '#title' => t('Hide Online Group'), 
+        '#return_value' => 1, 
+        '#default_value' => variable_get('ijab_hide_online_group', 0), 
+        '#description' => t("Hide online group in iJab main window."),
+	);
+	$form['ijab_config']['ijab_disable_option_setting'] = array(
+        '#type' => 'checkbox', 
+        '#title' => t('Disable Option Setting'), 
+        '#return_value' => 1, 
+        '#default_value' => variable_get('ijab_disable_option_setting', 0), 
+        '#description' => t("Disable option settings."),
+	);
+	$form['ijab_config']['ijab_disable_msg_browser_prompt'] = array(
+        '#type' => 'checkbox', 
+        '#title' => t('Disalbe notification on Browser Window Title'), 
+        '#return_value' => 1, 
+        '#default_value' => variable_get('ijab_disable_msg_browser_prompt', 0), 
+        '#description' => t("Do not set notification title on browser window title while receving new message."),
+	);
+	$form['ijab_config']['ijab_disable_toolbox'] = array(
+        '#type' => 'checkbox', 
+        '#title' => t('Disalbe Toolbox'), 
+        '#return_value' => 1, 
+        '#default_value' => variable_get('ijab_disable_toolbox', 0), 
+        '#description' => t("Disable toolbox region."),
+	);
+
+	return system_settings_form($form);
+}
+
+function ijab_menu() {
+
+  $items = array();
+
+  $items['admin/settings/ijab'] = array(
+    'title' => 'iJab settings',
+    'description' => 'Config iJab',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('ijab_admin'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+   );
+  $items['ijab/avatar'] = array(
+    'title' => 'Avatar',
+    'page callback' => '_ijab_user_avatar',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  $items['ijab/profile'] = array(
+    'title' => 'My account',
+    'page callback' => '_ijab_user_view',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_footer() to insert Javascript at the end of the page
+ */
+function ijab_footer() {
+    
+    /* include i18n js file first 
+     *
+     * Fixed me: later we should according to user's locale to include the right file
+     */
+    $i18n_src_file = _ijab_locale_language_from_browser();
+    $script = '<script type="text/javascript" src="'. _file_create_url($i18n_src_file) .'"></script>';
+
+    /* iJab config
+     * You could use the js config file for ease
+       $ijab_config_file = drupal_get_path('module', 'ijab') . '/core/ijab_config.js';
+       $script .= '<script type="text/javascript" src="'. $ijab_config_file .'"></script>';
+     */
+    $script .= '<script type="text/javascript">';
+    $script .= 'var iJabConf = new Object();';
+    $script .= 'iJabConf.client_type = "xmpp";';
+    $script .= 'iJabConf.app_type = "'. variable_get('ijab_app_type', 'bar') . '";';
+    $script .= 'iJabConf.theme = "' . variable_get('ijab_theme', 'standard') . '";';
+    $script .= 'iJabConf.avatar_url = "' . variable_get('ijab_avatar_url', '/ijab/avatar/{username}') . '";';
+    if (variable_get('ijab_enable_roster_manage', 0) == 1)
+        $script .= 'iJabConf.enable_roster_manage = true;';
+    else
+        $script .= 'iJabConf.enable_roster_manage = false;';
+    if (variable_get('ijab_enable_talkto_stranger', 1) == 1)
+        $script .= 'iJabConf.enable_talkto_stranger = true;';
+    else
+        $script .= 'iJabConf.enable_talkto_stranger = false;';
+    if (variable_get('ijab_expand_bar_default', 0) == 1)
+        $script .= 'iJabConf.expand_bar_default = true;';
+    else
+        $script .= 'iJabConf.expand_bar_default = false;';
+    if (variable_get('ijab_enable_login_dialog', 0) == 1)
+        $script .= 'iJabConf.enable_login_dialog = true;';
+    else
+        $script .= 'iJabConf.enable_login_dialog = false;';
+    if (variable_get('ijab_hide_online_group', 0) == 1)
+        $script .= 'iJabConf.hide_online_group = true;';
+    else
+        $script .= 'iJabConf.hide_online_group = false;';
+    if (variable_get('ijab_disable_option_setting', 0) == 1)
+        $script .= 'iJabConf.disable_option_setting = true;';
+    else
+        $script .= 'iJabConf.disable_option_setting = false;';
+    if (variable_get('ijab_disable_msg_browser_prompt', 0) == 1)
+        $script .= 'iJabConf.disable_msg_browser_prompt = true;';
+    else
+        $script .= 'iJabConf.disable_msg_browser_prompt = false;';
+    if (variable_get('ijab_disable_toolbox', 0) == 1)
+        $script .= 'iJabConf.disable_toolbox = true;';
+    else
+        $script .= 'iJabConf.disable_toolbox = false;';
+    
+    $script .= 'iJabConf.xmpp = new Object();';
+    $script .= 'iJabConf.xmpp.domain = "' . variable_get('ijab_xmpp_domain','anzsoft.com') . '";';
+    $script .= 'iJabConf.xmpp.http_bind = "' . variable_get('ijab_xmpp_http_bind', 'http://samespace.anzsoft.com:5280/http-bind/') . '";';
+    $script .= 'iJabConf.xmpp.host = "' . variable_get('ijab_xmpp_host', '') . '";';
+    $script .= 'iJabConf.xmpp.port = ' . variable_get('ijab_xmpp_port', 5222) .  ';';
+    $script .= 'iJabConf.xmpp.server_type = "' . variable_get('ijab_xmpp_server_type', 'ejabberd') .  '";';
+    if (variable_get('ijab_xmpp_auto_login', 0) == 1)
+        $script .= 'iJabConf.xmpp.auto_login = true;';
+    else
+        $script .= 'iJabConf.xmpp.auto_login = false;';
+    $script .= 'iJabConf.xmpp.username_cookie_field = "' . variable_get('ijab_xmpp_username_cookie_field', '') . '";';
+    $script .= 'iJabConf.xmpp.token_cookie_field = "' . variable_get('ijab_xmpp_token_cookie_field', '') . '";';
+    if (variable_get('ijab_xmpp_roster_mode', 'all') == 'online')
+        $script .= 'iJabConf.xmpp.none_roster = true;';
+    else
+        $script .= 'iJabConf.xmpp.none_roster = false;';
+    $script .= 'iJabConf.xmpp.get_roster_delay = true;';
+    $script .= 'iJabConf.xmpp.enable_muc = true;';
+    $script .= 'iJabConf.xmpp.muc_servernode = "conference.ijab.im";';
+    $script .= 'iJabConf.xmpp.vcard_search_servernode = "vjud.ijab.im";';
+ 
+    // tools and shortcuts
+    $script .= 'iJabConf.tools = [';
+    $script .= '{href:"http://www.google.com",target:"_blank",img:"http://www.google.com/favicon.ico",text:"Google Search"}';
+    $script .= ',{href:"http://www.xing.com/",target:"_blank",img:"http://www.xing.com/favicon.ico",text:"Xing"}';
+    $script .= '];';
+    
+    $script .= 'iJabConf.shortcuts = [';
+    $script .= '{href:"http://www.anzsoft.com/",target:"_blank",img:"http://www.anzsoft.com/favicon.ico",text:"Goto Anzsoft"}';
+    $script .= ',{href:"http://www.google.com",target:"_blank",img:"http://www.google.cn/favicon.ico",text:"Google Search"}';
+    $script .= '];';    
+     	
+    $script .= '</script>';
+ 
+     
+	$ijab_src_file = drupal_get_path('module', 'ijab') . '/core/ijab/ijab.nocache.js';
+	$script .= '<script type="text/javascript" src="'. _file_create_url($ijab_src_file) .'"></script>';
+
+    // check user logged in or not
+    if (!(bool)$GLOBALS['user']->uid) {
+        $script .= '<script type="text/javascript">';
+        $script .= 'function ijab_try_logout(){iJab.logout();}';
+        $script .= 'function wait_for_script_load(look_for, callback) {';
+        $script .= 'var interval = setInterval(function() {';
+        $script .= 'if (eval("typeof " + look_for) != "undefined") {';
+        $script .= 'clearInterval(interval);';
+        $script .= 'callback();';
+        $script .= '}}, 50);}';
+        
+        $script .= 'wait_for_script_load("iJab", ijab_try_logout);</script>';
+    }
+     
+	return $script;
+} //ijab_footer()
+
+/**
+ * Detect locale from browser and load correct i18n file
+ */
+function _ijab_locale_language_from_browser() {
+  $i18n_file_path = drupal_get_path('module', 'ijab') . '/ijab';
+  $i18n_file_en = $i18n_file_path . '/ijab_i18n_en.js';
+  
+ 
+  if (!isset($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
+    return $i18n_file_en;
+  }
+
+   $browser_langs = array();
+
+  if (isset($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
+    $browser_accept = explode(",", $_SERVER['HTTP_ACCEPT_LANGUAGE']);
+    foreach ($browser_accept as $langpart) {
+      // The language part is either a code or a code with a quality.
+      // We cannot do anything with a * code, so it is skipped.
+      // If the quality is missing, it is assumed to be 1 according to the RFC.
+      if (preg_match("!([a-z-]+)(;q=([0-9\\.]+))?!", trim($langpart), $found)) {
+        $browser_langs[$found[1]] = (isset($found[3]) ? (float) $found[3] : 1.0);
+      }
+    }
+  }
+
+  // Order the codes by quality
+  arsort($browser_langs);
+
+  // Try to find the first preferred language we have
+  foreach ($browser_langs as $langcode => $q) {
+    $i18n_file = $i18n_file_path . '/ijab_i18n_' . strtolower($langcode) . '.js';
+    if (file_exists($i18n_file)) {
+      return $i18n_file;
+    }
+  }
+
+  return $i18n_file_en;
+ }
+
+/*
+ * Menu callback: show user's picture
+ */ 
+function _ijab_user_avatar() {
+    $picture = "";
+    
+    $username = isset($_GET['username']) ? $_GET['username'] : ''; 
+    if (!empty($username)) {
+        
+        // load user info
+        $sync_fd = variable_get('ijabxmpp_sync_uid_name','uid');
+        if ($sync_fd == 'uid' )
+            $account = user_load(array('uid' => $username));
+        else
+            $account = user_load(array('name' => $username));
+            
+        if (variable_get('user_pictures', 0)) {
+            //$picture = theme('user_picture', $account);
+            if (!empty($account->picture) && file_exists($account->picture)) {
+              $picture_url = file_create_url($account->picture);
+              $mime = file_get_mimetype($account->picture);
+            }
+            else if (variable_get('user_picture_default', '')) {
+              $picture_url = variable_get('user_picture_default', '');
+              if (strpos($picture_url, $GLOBALS['base_url'] .'/') == 0) {
+                $picture_path = trim(substr($picture_url, strlen($GLOBALS['base_url'])), '\\/');
+              }
+              else {
+                $picture_path = $picture_url;
+              }
+              $picture_path = str_replace('/', '\\', $picture_path);
+              $mime = file_get_mimetype($picture_path);
+            }
+            $picture = file_get_contents($picture_url);
+            header('content-type: ' . $mime); 
+        }
+    }    
+    echo $picture;
+    exit;
+}
+
+/**
+ * Menu callback; Displays a user or user profile page.
+ */
+function _ijab_user_view($username) {
+  $username = isset($_GET['username']) ? $_GET['username'] : ''; 
+  if (!empty($username)) {
+        
+    // load user info
+    $sync_fd = variable_get('ijabxmpp_sync_uid_name','uid');
+    if ($sync_fd == 'uid' )
+        $account = user_load(array('uid' => $username));
+    else
+        $account = user_load(array('name' => $username));
+        
+    // Retrieve all profile fields and attach to $account->content.
+    user_build_content($account);
+  
+    // To theme user profiles, copy modules/user/user_profile.tpl.php
+    // to your theme directory, and edit it as instructed in that file's comments.
+    //return theme('user_profile', $account);
+  
+    $variables = array();
+    $variables['account'] = $account;
+    $variables['profile'] = array();
+    // Sort sections by weight
+    uasort($variables['account']->content, 'element_sort');
+    // Provide keyed variables so themers can print each section independantly.
+    foreach (element_children($variables['account']->content) as $key) {
+      $variables['profile'][$key] = drupal_render($variables['account']->content[$key]);
+    }
+    // Collect all profiles to make it easier to print all items at once.
+    $variables['user_profile'] = implode($variables['profile']);
+  
+    print $variables['user_profile'];
+  }
+  else
+    print '';
+  exit;
+}
+
+function _file_create_url($path) {
+  return $GLOBALS['base_url'] .'/'.str_replace('\\', '/', $path);
+}

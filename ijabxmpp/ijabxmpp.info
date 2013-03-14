@@ -1,0 +1,3 @@
+name = iJab XMPP
+description = Allows to sync users to XMPP server and make iJab single-sign-on with Drupal.
+core = 6.x

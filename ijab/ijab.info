@@ -1,0 +1,5 @@
+name = "iJab XMPP Chat"
+description = "Integrate iJab, an AJAX XMPP web chat client that can act as Facebook style chat bar, into Drupal"
+core = 6.x
+php = 5.1
+package = Chat

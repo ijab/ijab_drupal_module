@@ -1,0 +1,25 @@
+<?php
+function ijab_install() {
+
+}
+
+function ijab_uninstall() {
+	variable_del('ijab_xmpp_domain');
+	variable_del('ijab_xmpp_http_bind');
+	variable_del('ijab_xmpp_host');
+	variable_del('ijab_xmpp_port');
+	variable_del('ijab_xmpp_server_type');
+	variable_del('ijab_xmpp_roster_mode');
+	/*variable_del('ijab_app_type');*/
+	variable_del('ijab_theme');
+	variable_del('ijab_avatar_url');
+	variable_del('ijab_enable_roster_manage');
+	variable_del('ijab_enable_talkto_stranger');
+	variable_del('ijab_expand_bar_default');
+	variable_del('ijab_enable_login_dialog');
+	variable_del('ijab_hide_online_group');
+	variable_del('ijab_disable_option_setting');
+	variable_del('ijab_disable_msg_browser_prompt');
+	variable_del('ijab_disable_toolbox');
+	variable_del('ijab_debug');
+}
